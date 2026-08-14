@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroEmotion AI - Real-time EEG Emotion Recognizer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo-icon"><i class="fa-solid fa-brain-circuit pulse-glow"></i></div>
+                <div class="brand-text">
+                    <h1>NeuroEmotion AI</h1>
+                    <span>EEG Signal Classifier</span>
+                </div>
+            </div>
+
+            <!-- Selectors -->
+            <div class="control-group">
+                <h3><i class="fa-solid fa-sliders"></i> Dataset Selector</h3>
+                <div class="input-field">
+                    <label for="subject-select">Subject</label>
+                    <div class="select-wrapper">
+                        <select id="subject-select"><option value="" disabled selected>Loading...</option></select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="input-field">
+                    <label for="session-select">Session</label>
+                    <div class="select-wrapper">
+                        <select id="session-select" disabled><option value="" disabled selected>Select subject first</option></select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="input-field">
+                    <label for="trial-select">Trial / Stimulus</label>
+                    <div class="select-wrapper">
+                        <select id="trial-select">
+                            <option value="1">Trial 1 (Positive)</option>
+                            <!-- Trials 2..15 omitted for brevity -->
+                            <option value="15">Trial 15 (Negative)</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="input-field">
+                    <label for="window-select">Window Size</label>
+                    <div class="select-wrapper">
+                        <select id="window-select">
+                            <option value="1s" selected>1-Second Windows</option>
+                            <option value="4s">4-Second Windows</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Settings -->
+            <div class="control-group">
+                <h3><i class="fa-solid fa-gears"></i> Model Settings</h3>
+                <div class="input-field">
+                    <label for="split-select">Validation Split</label>
+                    <div class="select-wrapper">
+                        <select id="split-select">
+                            <option value="leave_one_out" selected>Leave-One-Trial-Out (LOO)</option>
+                            <option value="10_5_split">10 Train / 5 Test Split</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="input-field">
+                    <label for="feature-select">EEG Feature Type</label>
+                    <div class="select-wrapper">
+                        <select id="feature-select">
+                            <option value="de_LDS" selected>Differential Entropy (LDS)</option>
+                            <option value="de_movingAve">Differential Entropy (Mov Avg)</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="input-field">
+                    <label for="classifier-select">ML Classifier</label>
+                    <div class="select-wrapper">
+                        <select id="classifier-select">
+                            <option value="svm_linear" selected>SVM (Linear)</option>
+                            <option value="svm_rbf">SVM (RBF)</option>
+                            <option value="random_forest">Random Forest</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="input-field">
+                    <label for="cluster-select">K-Means Clusters</label>
+                    <div class="select-wrapper">
+                        <select id="cluster-select">
+                            <option value="4">4 Clusters</option>
+                            <option value="8" selected>8 Clusters (recommended)</option>
+                            <option value="16">16 Clusters</option>
+                        </select>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+            </div>
+                <button id="run-btn" class="btn btn-primary btn-block"><i class="fa-solid fa-play"></i> Run Classification</button>
+            </div>
+
+            <!-- Upload Widget -->
+            <div class="control-group upload-group">
+                <h3><i class="fa-solid fa-cloud-arrow-up"></i> Custom File</h3>
+                <div id="drop-zone" class="drop-zone">
+                    <i class="fa-solid fa-file-medical"></i>
+                    <p>Drag & drop <code>.mat</code> file here or <span>browse</span></p>
+                    <input type="file" id="file-input" accept=".mat" hidden>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="navbar">
+                <div class="navbar-title">
+                    <h2>NeuroEmotion Recognition Dashboard</h2>
+                    <p id="sub-header">Select options on the left to begin classification.</p>
+                </div>
+            </header>
+
+            <!-- Loading Overlay -->
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="loader-content"><div class="spinner"></div><h3 id="loader-title">Training Classifier...</h3></div>
+            </div>
+
+            <!-- Welcome Panel -->
+            <div id="welcome-panel" class="welcome-panel">...</div>
+
+            <!-- Main Dashboard Panel -->
+            <div id="dashboard-panel" class="dashboard-panel hidden">
+                <!-- Metrics -->
+                <div class="metrics-grid">
+                    <div class="card card-metric" id="card-ground-truth">
+                        <div class="card-info"><span>Stimulus Target</span><h2 id="val-ground-truth">-</h2></div>
+                        <div class="card-accent"></div>
+                    </div>
+                    <div class="card card-metric" id="card-prediction">
+                        <div class="card-info"><span>AI Predicted</span><h2 id="val-prediction">-</h2></div>
+                        <div class="card-accent"></div>
+                    </div>
+                    <!-- Accuracy & Duration Cards omitted for brevity -->
+                    <div class="card card-metric" id="card-precision">
+                        <div class="card-info">
+                            <span>Precision</span>
+                            <h2 id="val-precision">-</h2>
+                         </div>
+                        <div class="card-accent"></div>
+                    </div>
+
+                    <div class="card card-metric" id="card-auc">
+                        <div class="card-info">
+                            <span>AUC-ROC</span>
+                            <h2 id="val-auc">-</h2>
+                        </div>
+                        <div class="card-accent"></div>
+                    </div>
+                    <div class="card card-metric" id="card-accuracy">
+                        <div class="card-info">
+                            <span>Accuracy</span>
+                            <h2 id="val-accuracy">-</h2>
+                        </div>
+                        <div class="card-accent"></div>
+                    </div>
+
+                    <div class="card card-metric" id="card-duration">
+                        <div class="card-info">
+                            <span>Duration</span>
+                            <h2 id="val-duration">-</h2>
+                        </div>
+                        <div class="card-accent"></div>
+                        </div>
+                    </div>
+
+
+                <!-- 10 Train / 5 Test Grid Panel -->
+                <div id="test-summary-panel" class="card test-summary-card hidden">
+                    <div class="card-header">
+                        <h3>10 Train / 5 Test Split Results</h3>
+                        <div class="test-accuracy-badge">Test Accuracy: <strong id="val-test-accuracy">-</strong></div>
+                    </div>
+                    <div class="test-trials-grid" id="test-trials-container"></div>
+                </div>
+
+                <!-- Viz Grid (Canvas map & Timeline charts) -->
+                <div class="viz-grid">
+                    <div class="card viz-card topomap-card">
+                        <div class="band-tabs">
+                            <button class="band-tab" data-band="delta">Delta</button>
+                            <button class="band-tab" data-band="theta">Theta</button>
+                            <button class="band-tab active" data-band="alpha">Alpha</button>
+                            <button class="band-tab" data-band="beta">Beta</button>
+                            <button class="band-tab" data-band="gamma">Gamma</button>
+                        </div>
+                        <div class="topomap-container">
+                            <canvas id="topomap-canvas" width="360" height="360"></canvas>
+                        </div>
+                        <div class="topomap-legend">
+                            <span>High Activity</span>
+                            <div class="legend-bar"></div>
+                            <span>Low Activity</span>
+                        </div>
+                        <!-- Frequency Band Reference Table -->
+                        <div class="band-ref-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Band</th>
+                                        <th>Range</th>
+                                        <th>Emotion Role</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="band-row-delta">
+                                        <td><span class="band-dot"></span>Delta</td>
+                                        <td>0.5–4 Hz</td>
+                                        <td>Deep states</td>
+                                    </tr>
+                                    <tr class="band-row-theta">
+                                        <td><span class="band-dot"></span>Theta</td>
+                                        <td>4–8 Hz</td>
+                                        <td>Anxiety, stress</td>
+                                    </tr>
+                                    <tr class="band-row-alpha">
+                                        <td><span class="band-dot"></span>Alpha</td>
+                                        <td>8–13 Hz</td>
+                                        <td>Relaxation</td>
+                                    </tr>
+                                    <tr class="band-row-beta">
+                                        <td><span class="band-dot"></span>Beta</td>
+                                        <td>13–30 Hz</td>
+                                        <td>Arousal, focus</td>
+                                    </tr>
+                                    <tr class="band-row-gamma">
+                                        <td><span class="band-dot"></span>Gamma</td>
+                                        <td>30–45 Hz</td>
+                                        <td>Intense emotion</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                    <div class="card viz-card timeline-card">
+                        <div class="chart-container"><canvas id="probability-chart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Scrubber Controls -->
+<div class="card timeline-scrubber-card">
+
+    <div class="scrubber-header">
+        <div class="scrubber-status">
+            <div class="current-time-text">
+                EEG Playback
+            </div>
+        </div>
+
+        <div class="playback-controls">
+            <button id="play-btn" class="btn-icon">
+                <i class="fa-solid fa-play"></i>
+            </button>
+
+            <button id="pause-btn" class="btn-icon">
+                <i class="fa-solid fa-pause"></i>
+            </button>
+
+            <button id="reset-btn" class="btn-icon">
+                <i class="fa-solid fa-rotate-left"></i>
+            </button>
+        </div>
+    </div>
+
+    <input
+        type="range"
+        id="timeline-scrubber"
+        min="0"
+        max="100"
+        value="0"
+    >
+
+</div>            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
